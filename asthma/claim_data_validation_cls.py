@@ -6,7 +6,6 @@ from pandas.testing import assert_index_equal
 class DiagnosisCodeValidation:
 
     def __init__(self):
-        self.code_icd_columns = None
         self._validated = False
 
     @staticmethod
@@ -43,19 +42,12 @@ class DiagnosisCodeValidation:
                         msg = f'{code} needs manual missing values check!'
                         raise ValueError(msg)
 
-    def get_code_icd_columns(self):
-        if self._validated is True:
-            return self._select_code_and_icd_columns()
-        else:
-            warnings.warn("Data haven't been validated. Use validate() method")
-            return None
-
     def validate(self, df):
         print('   Validating Diagnosis and Procedure Codes ...', end=' ')
         if self._validated is False:
             self._validate_diagnosis_and_procedure_code_columns(df)
             self._validated = True
-            print('Done!')
+        print('Done!')
 
 
 class ValidateRevenueCodes:
