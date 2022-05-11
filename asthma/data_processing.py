@@ -9,9 +9,7 @@ class ClaimViewDataProcessing:
         self._multiple_medicaid_ids = None
 
     def get_processed_data(self):
-        pmi = ProcessMemberMedicaidIDs()
-        pmi.process_medicaid_ids(self._df)
-        self._multiple_medicaid_ids = pmi.get_members_with_multiple_ids()
+        ProcessMemberMedicaidIDs().process_medicaid_ids(self._df)
         IdentifyAsthmaRelatedClaims().extract_asthma_flags(self._df)
         IdentifyVisitTypes().extract_visit_types(self._df)
         return self._df

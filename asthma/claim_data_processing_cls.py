@@ -72,7 +72,6 @@ class IdentifyAsthmaRelatedClaims:
 
         idx_sec_as = df.loc[lambda x: x.prm_sec_as == 1].claimid.unique()
         df.loc[lambda x: x.claimid.isin(idx_sec_as), 'prm_sec_as'] = 1
-        print('Done!!!', end='\n\n')
 
 
 class IdentifyVisitTypes:
@@ -145,23 +144,21 @@ class IdentifyVisitTypes:
         # identify cases in the order of inpatient-ed-outpatient
         df['inpt'] = self._identify_inpatient_visits(df)
         inpt_visit_ids = df.loc[lambda x: x.inpt == 1].visitID.unique()
-        idx = df.loc[lambda x: x.visitID.isin(inpt_visit_ids)].index
-        df.loc[idx, 'inpt'] = 1
+        df.loc[lambda x: x.visitID.isin(inpt_visit_ids), 'inpt'] = 1
         print('   Inpatient visits extracted...')
 
-        df['ED'] = self._identify_ed_visits(df)
-        ed_visit_ids = df.loc[lambda x: x.ED == 1].visitID.unique()
+        df['ED'] = 0
+        arr_ED = np.where(self._identify_ed_visits(df) == 1)
+        ed_visit_ids = df.loc[arr_ED].visitID.unique()
         ed_visit_ids = list(set(ed_visit_ids).difference(set(inpt_visit_ids)))
-        idx = df.loc[lambda x: x.visitID.isin(ed_visit_ids)].index
-        df.loc[idx, 'ED'] = 1
+        df.loc[lambda x: x.visitID.isin(ed_visit_ids), 'ED'] = 1
         print('   ED visits extracted...')
 
-        df['outpt'] = self._identify_outpatient_visits(df)
-        outpt_visit_ids = df.loc[lambda x: x.outpt == 1].visitID.unique()
+        arr_outpt = np.where(self._identify_outpatient_visits(df) == 1)
+        outpt_visit_ids = df.loc[arr_outpt].visitID.unique()
         outpt_visit_ids = set(outpt_visit_ids).difference(set(ed_visit_ids))
         outpt_visit_ids = list(outpt_visit_ids.difference(set(inpt_visit_ids)))
-        idx = df.loc[lambda x: x.visitID.isin(outpt_visit_ids)].index
-        df.loc[idx, 'outpt'] = 1
+        df.loc[lambda x: x.visitID.isin(outpt_visit_ids), 'outpt'] = 1
         print('   Outpatient visits extracted...')
 
         assert set(inpt_visit_ids).intersection(set(ed_visit_ids)) == set()
@@ -193,7 +190,7 @@ class ProcessMemberMedicaidIDs:
                           df.shape[0]))
 
     def _check_multiple_medicaid_ids(self, df):
-        print('   Checking if multiple Medicaid IDs exist...')
+        print('Checking if multiple Medicaid IDs exist...')
         left = df.member_medicaid_id.value_counts()
         right = (df[['member_medicaid_id', 'claimid']]
                  .sort_values(['claimid', 'member_medicaid_id'])
@@ -230,6 +227,7 @@ class ProcessMemberMedicaidIDs:
             self._multiple_medicaid_ids = pd.DataFrame(l)
 
     def process_medicaid_ids(self, df):
+        print('Checking Member Medicaid IDs ...')
         df['member_medicaid_id'] = self._process_member_medicaid_ids(df)
         self._identify_alphanumeric_ids(df)
         self._check_multiple_medicaid_ids(df)
