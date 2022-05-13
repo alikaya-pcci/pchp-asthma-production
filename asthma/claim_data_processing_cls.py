@@ -154,6 +154,7 @@ class IdentifyVisitTypes:
         df.loc[lambda x: x.visitID.isin(ed_visit_ids), 'ED'] = 1
         print('   ED visits extracted...')
 
+        df['outpt'] = 0
         arr_outpt = np.where(self._identify_outpatient_visits(df) == 1)
         outpt_visit_ids = df.loc[arr_outpt].visitID.unique()
         outpt_visit_ids = set(outpt_visit_ids).difference(set(ed_visit_ids))
