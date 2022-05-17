@@ -181,8 +181,8 @@ class ProcessMemberMedicaidIDs:
         idx_alpha = (df.member_medicaid_id.loc[lambda x: ~x.str.isnumeric()]
                      .unique())
         if idx_alpha.shape[0]:
-            print('   {:,} out of {:,} members have alphanumeric Medicaid IDs '
-                  '(associates with {:,} out of {:,} records).'
+            print('   {:,} out of {:,} Medicaid IDs are alphanumeric '
+                  '(associated with {:,} out of {:,} records).'
                   .format(idx_alpha.shape[0],
                           df.member_medicaid_id.unique().shape[0],
                           (df
@@ -208,9 +208,10 @@ class ProcessMemberMedicaidIDs:
             idxs = (df.loc[lambda x: x.claimid.isin(claims)]
                     .member_medicaid_id
                     .unique())
-            print('   There are multiple Medicaid IDs for some members, which '
-                  'affects {:,} members and {:,} claims.'
+            print('   {:,} out of {:,} Medicaid IDs are duplicated that affects'
+                  ' {:,} claims.'
                   .format(len(diff),
+                          df.member_medicaid_id.unique().shape[0],
                           (df.loc[lambda x: x.member_medicaid_id.isin(idxs)]
                           .shape[0])))
 
