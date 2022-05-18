@@ -29,8 +29,7 @@ class IdentifyAsthmaRelatedClaims:
     @staticmethod
     def _identify_asthma_claims(df, code_col):
         icd_col = f'{code_col}_icd_vers'
-        arr = np.where(
-            df[code_col].isin(ASTHMA_ICD_10_CM_CODES), 1, 0)
+        arr = np.where(df[code_col].isin(ASTHMA_ICD_10_CM_CODES), 1, 0)
         arr = pd.Series(arr)
         idx = (df
                .loc[lambda x: x[icd_col] == 9]
@@ -66,12 +65,6 @@ class IdentifyAsthmaRelatedClaims:
             if 'primary' in col:
                 df['prm_as'].loc[idx] = 1
             df['prm_sec_as'].loc[idx] = 1
-
-        idx_as = df.loc[lambda x: x.prm_as == 1].claimid.unique()
-        df.loc[lambda x: x.claimid.isin(idx_as), 'prm_as'] = 1
-
-        idx_sec_as = df.loc[lambda x: x.prm_sec_as == 1].claimid.unique()
-        df.loc[lambda x: x.claimid.isin(idx_sec_as), 'prm_sec_as'] = 1
 
 
 class IdentifyVisitTypes:

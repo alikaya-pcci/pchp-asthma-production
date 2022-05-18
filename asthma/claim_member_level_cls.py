@@ -1,9 +1,116 @@
+import re
+import numpy as np
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from asthma.codebook import *
 
 
 class IdentifyComorbidities:
-    pass
+
+    def _get_diagnosis_columns(self, df):
+        r = r'(?!.*admit)(?!.*desc)(?!.*icd)claim_(header|line)_diagnosis'
+        pattern = re.compile(r)
+        self.diag_columns = [col for col in df.columns if pattern.match(col)]
+
+    def identify_allergic_rhinitis_diagnoses(self, df):
+        if not hasattr(self, 'diag_columns'):
+            self._get_diagnosis_columns(df)
+
+        temp = df[['member_medicaid_id']]
+        temp['allergic_co'] = 0
+        for code_col in self.diag_columns:
+            icd_col = f'{code_col}_icd_vers'
+            arr = np.where(df[code_col].isin(ALLERGIC_ICD_10_CODES), 1, 0)
+            idx = (df.loc[lambda x: x[icd_col] == 9]
+                   .loc[lambda x: (x[code_col].ge(ALLERGIC_ICD_9_MIN_THRESH) &
+                                   x[code_col].le(ALLERGIC_ICD_9_MAX_THRESH))]
+                   .index)
+            if idx.shape[0]:
+                arr[idx] = 1
+
+            idx_al = np.where(arr == 1)
+            temp['allergic_co'].loc[idx_al] = 1
+
+        df_ = temp.groupby('member_medicaid_id').sum().reset_index()
+        df_['allergic_co'] = (df_.allergic_co > 0).astype(int)
+        return df_
+
+    def identify_obesity_diagnoses(self, df):
+        if not hasattr(self, 'diag_columns'):
+            self._get_diagnosis_columns(df)
+
+        temp = df[['member_medicaid_id']]
+        temp['obesity_co'] = 0
+        for code_col in self.diag_columns:
+            icd_col = f'{code_col}_icd_vers'
+            arr = np.where(df[code_col].isin(OBESITY_ICD_10_CODES), 1, 0)
+            idx = (df.loc[lambda x: x[icd_col] == 9]
+                   .loc[lambda x: (x[code_col].ge(OBESITY_ICD_9_MIN_THRESH) &
+                                   x[code_col].le(OBESITY_ICD_9_MAX_THRESH))]
+                   .index)
+            if idx.shape[0]:
+                arr[idx] = 1
+
+            idx_ob = np.where(arr == 1)
+            temp['obesity_co'].loc[idx_ob] = 1
+
+        df_ = temp.groupby('member_medicaid_id').sum().reset_index()
+        df_['obesity_co'] = (df_.obesity_co > 0).astype(int)
+        return df_
+
+    def identify_obstructive_sleep_apnea_diagnoses(self, df):
+        if not hasattr(self, 'diag_columns'):
+            self._get_diagnosis_columns(df)
+
+        temp = df[['member_medicaid_id']]
+        temp['obs_sleep_co'] = 0
+        for code_col in self.diag_columns:
+            icd_col = f'{code_col}_icd_vers'
+            arr = np.where(df[code_col] == OBS_SLEEP_ICD_10_CODE, 1, 0)
+            idx = (df.loc[lambda x: x[icd_col] == 9]
+                   .loc[lambda x: x[code_col] == OBS_SLEEP_ICD_9_CODE].index)
+            if idx.shape[0]:
+                arr[idx] = 1
+
+            idx_obs = np.where(arr == 1)
+            temp['obs_sleep_co'].loc[idx_obs] = 1
+
+        df_ = temp.groupby('member_medicaid_id').sum().reset_index()
+        df_['obs_sleep_co'] = (df_.obs_sleep_co > 0).astype(int)
+        return df_
+
+    def identify_gerd_diagnoses(self, df):
+        if not hasattr(self, 'diag_columns'):
+            self._get_diagnosis_columns(df)
+
+        temp = df[['member_medicaid_id']]
+        temp['GERD_co'] = 0
+        for code_col in self.diag_columns:
+            icd_col = f'{code_col}_icd_vers'
+            arr = np.where(df[code_col].isin(GERD_ICD_10_CODES), 1, 0)
+
+            idx = (df.loc[lambda x: x[icd_col] == 9]
+                   .loc[lambda x: x[code_col] == GERD_ICD_9_CODE].index)
+            if idx.shape[0]:
+                arr[idx] = 1
+
+            idx_gerd = np.where(arr == 1)
+            temp['GERD_co'].loc[idx_gerd] = 1
+
+        df_ = temp.groupby('member_medicaid_id').sum().reset_index()
+        df_['GERD_co'] = (df_.GERD_co > 0).astype(int)
+        return df_
+
+    def identify_comorbidities(self, df):
+        df_allergic = self.identify_allergic_rhinitis_diagnoses(df)
+        df_obesity = self.identify_obesity_diagnoses(df)
+        df_obs_sleep = self.identify_obstructive_sleep_apnea_diagnoses(df)
+        df_gerd = self.identify_gerd_diagnoses(df)
+        member_data = (df.member_medicaid_id.drop_duplicates()
+                       .sort_values(ignore_index=True).to_frame())
+        return (member_data.merge(df_allergic, how='left')
+                .merge(df_obesity, how='left').merge(df_obs_sleep, how='left')
+                .merge(df_gerd, how='left'))
 
 
 class IdentifyPastVisits:
@@ -73,7 +180,10 @@ class IdentifyPastEDVisits(IdentifyPastVisits):
                         ED_as_pd_12=('ED_as_paid_amt', 'sum'))
                    .reset_index())
         how = 'left'
-        return self.member_data.merge(df12, how=how).merge(df12_as, how=how)
+        df_final = self.member_data.merge(df12, how=how).merge(df12_as, how=how)
+        for c in ['ED_n12', 'ED_pd_12', 'ED_as_n12', 'ED_as_pd_12']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
 
     def get_past_6_months_ed_visits(self):
         df = self._calculate_all_cause_past_ed_visits(6)
@@ -84,7 +194,10 @@ class IdentifyPastEDVisits(IdentifyPastVisits):
                   .groupby('member_medicaid_id')
                   .agg(ED_as_n6=('is_as_ED', 'sum')).reset_index())
         how = 'left'
-        return self.member_data.merge(df6, how=how).merge(df6_as, how=how)
+        df_final = self.member_data.merge(df6, how=how).merge(df6_as, how=how)
+        for c in ['ED_n6', 'ED_as_n6']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
 
     def get_past_3_months_ed_visits(self):
         df = self._calculate_all_cause_past_ed_visits(3)
@@ -95,7 +208,10 @@ class IdentifyPastEDVisits(IdentifyPastVisits):
                   .groupby('member_medicaid_id')
                   .agg(ED_as_n3=('is_as_ED', 'sum')).reset_index())
         how = 'left'
-        return self.member_data.merge(df3, how=how).merge(df3_as, how=how)
+        df_final = self.member_data.merge(df3, how=how).merge(df3_as, how=how)
+        for c in ['ED_n3', 'ED_as_n3']:
+            df_final[c].fillna(0, inplace=True)
+        return df
 
     def get_past_ed_visits(self):
         df12 = self.get_past_12_months_ed_visits()
@@ -154,7 +270,10 @@ class IdentifyPastInpatientVisits(IdentifyPastVisits):
                         inpt_as_pd_12=('inpt_as_paid_amt', 'sum'))
                    .reset_index())
         how = 'left'
-        return self.member_data.merge(df12, how=how).merge(df12_as, how=how)
+        df_final = self.member_data.merge(df12, how=how).merge(df12_as, how=how)
+        for c in ['inpt_n12', 'inpt_pd_12', 'inpt_as_n12', 'inpt_as_pd_12']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
 
     def get_past_6_months_inpt_visits(self):
         df = self._calculate_all_cause_past_inpt_visits(6)
@@ -165,7 +284,10 @@ class IdentifyPastInpatientVisits(IdentifyPastVisits):
                   .groupby('member_medicaid_id')
                   .agg(inpt_as_n6=('is_as_inpt', 'sum')).reset_index())
         how = 'left'
-        return self.member_data.merge(df6, how=how).merge(df6_as, how=how)
+        df_final = self.member_data.merge(df6, how=how).merge(df6_as, how=how)
+        for c in ['inpt_n6', 'inpt_as_n6']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
 
     def get_past_3_months_inpt_visits(self):
         df = self._calculate_all_cause_past_inpt_visits(3)
@@ -176,7 +298,10 @@ class IdentifyPastInpatientVisits(IdentifyPastVisits):
                   .groupby('member_medicaid_id')
                   .agg(inpt_as_n3=('is_as_inpt', 'sum')).reset_index())
         how = 'left'
-        return self.member_data.merge(df3, how=how).merge(df3_as, how=how)
+        df_final = self.member_data.merge(df3, how=how).merge(df3_as, how=how)
+        for c in ['inpt_n3', 'inpt_as_n3']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
 
     @staticmethod
     def _extract_unique_inpt_visits(df, is_asthma=False):
@@ -208,7 +333,11 @@ class IdentifyPastInpatientVisits(IdentifyPastVisits):
         df3u = (df3u.groupby('member_medicaid_id')
                 .agg(inpt_u_n3=('is_inpt', 'sum'))
                 .reset_index())
-        return self.member_data.merge(df12u, how='left').merge(df3u, how='left')
+        how = 'left'
+        df_final = self.member_data.merge(df12u, how=how).merge(df3u, how=how)
+        for c in ['inpt_u_n12', 'inpt_u_n3']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
 
     def get_asthma_unique_inpt_visits(self):
         df12u_as = self._calculate_asthma_past_inpt_visits(12)
@@ -221,8 +350,11 @@ class IdentifyPastInpatientVisits(IdentifyPastVisits):
         df3u_as = (df3u_as.groupby('member_medicaid_id')
                    .agg(inpt_as_u_n3=('is_as_inpt', 'sum'))
                    .reset_index())
-        how = 'left'
-        return self.member_data.merge(df12u_as, how=how).merge(df3u_as, how=how)
+        df_final = (self.member_data.merge(df12u_as, how='left')
+                    .merge(df3u_as, how='left'))
+        for c in ['inpt_as_u_n12', 'inpt_as_u_n3']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
 
     def get_past_inpt_visits(self):
         df12 = self.get_past_12_months_inpt_visits()
@@ -238,3 +370,119 @@ class IdentifyPastInpatientVisits(IdentifyPastVisits):
                 .merge(dfu_as, how='left'))
 
 
+class IdentifyPastOutpatientVisits(IdentifyPastVisits):
+
+    def __init__(self, df):
+        super().__init__(df)
+
+    def _calculate_all_cause_past_outpatient_visits(self, months_back):
+        temp = self.data[
+            ['member_medicaid_id', 'outpt', 'total_paid_amt', 'dos',
+             'attending_providerid']]
+        temp = temp.loc[lambda x: (
+                (x.dos <= self.period) &
+                (x.dos >= (self.period - relativedelta(months=months_back))))]
+        temp['outpt_amt'] = temp.outpt.mul(temp.total_paid_amt)
+        df = temp.groupby(['member_medicaid_id', 'dos']).agg(
+            is_outpt=('outpt', 'sum'), outpt_paid_amt=('outpt_amt', 'sum'),
+            attending_providerid=('attending_providerid', 'first'))
+        df['is_outpt'] = (df.is_outpt > 0).astype(int)
+        df.reset_index(inplace=True)
+        return df
+
+    def _calculate_asthma_past_outpatient_visits(self, months_back):
+        temp = self.data[
+            ['member_medicaid_id', 'outpt', 'total_paid_amt', 'dos',
+             'prm_sec_as']]
+        temp = temp.loc[lambda x: (
+                (x.dos <= self.period) &
+                (x.dos >= (self.period - relativedelta(months=months_back))))]
+        temp['outpt_as'] = temp.outpt.mul(temp.prm_sec_as)
+        temp['outpt_as_amt'] = (temp.outpt.mul(temp.total_paid_amt)
+                                .mul(temp.prm_sec_as))
+        df = temp.groupby(['member_medicaid_id', 'dos']).agg(
+            is_as_outpt=('outpt_as', 'sum'),
+            outpt_as_paid_amt=('outpt_as_amt', 'sum'))
+        df['is_as_outpt'] = (df.is_as_outpt > 0).astype(int)
+        df.reset_index(inplace=True)
+        return df
+
+    def get_past_12_months_outpt_visits(self):
+        df = self._calculate_all_cause_past_outpatient_visits(12)
+        df12 = (df.loc[lambda x: x.is_outpt == 1].groupby('member_medicaid_id')
+                .agg(outpt_n12=('is_outpt', 'sum'),
+                     outpt_d=('dos', 'max'),
+                     outpt_pd_12=('outpt_paid_amt', 'sum'),
+                     attending_providerid=('attending_providerid', 'first'))
+                .reset_index())
+        df_as = self._calculate_asthma_past_outpatient_visits(12)
+        df12_as = (df_as.loc[lambda x: x.is_as_outpt == 1]
+                   .groupby('member_medicaid_id')
+                   .agg(outpt_as_n12=('is_as_outpt', 'sum'),
+                        outpt_as_d=('dos', 'max'),
+                        outpt_as_pd_12=('outpt_as_paid_amt', 'sum'))
+                   .reset_index())
+        how = 'left'
+        df_final = self.member_data.merge(df12, how=how).merge(df12_as, how=how)
+        for c in ['outpt_n12', 'outpt_pd_12', 'outpt_as_n12', 'outpt_as_pd_12']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
+
+    def get_past_6_months_outpt_visits(self):
+        df = self._calculate_all_cause_past_outpatient_visits(6)
+        df6 = (df.loc[lambda x: x.is_outpt == 1].groupby('member_medicaid_id')
+               .agg(outpt_n6=('is_outpt', 'sum')).reset_index())
+        df_as = self._calculate_asthma_past_outpatient_visits(6)
+        df6_as = (df_as.loc[lambda x: x.is_as_outpt == 1]
+                  .groupby('member_medicaid_id')
+                  .agg(outpt_as_n6=('is_as_outpt', 'sum')).reset_index())
+        how = 'left'
+        df_final = self.member_data.merge(df6, how=how).merge(df6_as, how=how)
+        for c in ['outpt_n6', 'outpt_as_n6']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
+
+    def get_past_3_months_outpt_visits(self):
+        df = self._calculate_all_cause_past_outpatient_visits(3)
+        df3 = (df.loc[lambda x: x.is_outpt == 1].groupby('member_medicaid_id')
+               .agg(outpt_n3=('is_outpt', 'sum')).reset_index())
+        df_as = self._calculate_asthma_past_outpatient_visits(3)
+        df3_as = (df_as.loc[lambda x: x.is_as_outpt == 1]
+                  .groupby('member_medicaid_id')
+                  .agg(outpt_as_n3=('is_as_outpt', 'sum')).reset_index())
+        how = 'left'
+        df_final = self.member_data.merge(df3, how=how).merge(df3_as, how=how)
+        for c in ['outpt_n3', 'outpt_as_n3']:
+            df_final[c].fillna(0, inplace=True)
+        return df_final
+
+    def _get_max_doc_by_member(self):
+        temp = self.data[
+            ['member_medicaid_id', 'outpt', 'dos', 'attending_providerid']]
+        temp = temp.loc[lambda x: (
+                (x.dos <= self.period) &
+                (x.dos >= (self.period - relativedelta(months=24))))]
+        df = temp.groupby(
+            ['member_medicaid_id', 'dos', 'attending_providerid']).agg(
+            is_outpt=('outpt', 'sum'))
+        df.reset_index(inplace=True)
+        df['is_outpt'] = (df.is_outpt > 0).astype(int)
+        df = (df.loc[lambda x: x.is_outpt == 1]
+              .groupby(['member_medicaid_id', 'attending_providerid'])
+              .agg(outpt_freq=('is_outpt', 'sum'),
+                   max_doc=('attending_providerid', 'first'))
+              .reset_index()
+              .sort_values(['member_medicaid_id', 'outpt_freq'],
+                           ascending=[True, False])
+              .drop_duplicates('member_medicaid_id', keep='first')
+              [['member_medicaid_id', 'max_doc']])
+        return df
+
+    def get_past_outpt_visits(self):
+        df12 = self.get_past_12_months_outpt_visits()
+        df6 = self.get_past_6_months_outpt_visits()
+        df3 = self.get_past_3_months_outpt_visits()
+        df_max_doc = self._get_max_doc_by_member()
+        return (self.member_data.merge(df12, how='left')
+                .merge(df6, how='left').merge(df3, how='left')
+                .merge(df_max_doc, how='left'))

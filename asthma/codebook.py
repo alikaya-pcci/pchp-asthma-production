@@ -14,11 +14,10 @@ The history:
 ['J82.33']
 """
 
+
 # codes used for identifying asthma-related claims
 ASTHMA_ICD_9_MIN_THRESH = '493'
 ASTHMA_ICD_9_MAX_THRESH = '494'
-
-
 ASTHMA_ICD_10_CM_CODES = [
     'J45.20','J45.21','J45.22',
     'J45.30','J45.31','J45.32',
@@ -26,6 +25,7 @@ ASTHMA_ICD_10_CM_CODES = [
     'J45.50','J45.51','J45.52',
     'J45.900','J45.901','J45.902',
     'J45.909', 'J82.33']
+
 
 # codes used for identifying visit types
 INPT_REV_CODES = (list(range(100, 220)) +
@@ -47,6 +47,25 @@ OUTPT_POS_CODES = [2, 3, 4, 5, 6, 7, 8, 9, 10,
                    52, 53, 54, 56, 57, 58, 60, 62, 65,
                    71, 72]
 VIRTUAL_POS_CODES = [2, 10]
+
+
+ALLERGIC_ICD_9_MIN_THRESH = '477.0'
+ALLERGIC_ICD_9_MAX_THRESH = '477.9'
+ALLERGIC_ICD_10_CODES = ['J30', 'J30.1', 'J30.2', 'J30.81', 'J30.89', 'J30.9']
+
+
+OBESITY_ICD_9_MIN_THRESH = '278.0'
+OBESITY_ICD_9_MAX_THRESH = '278.03'
+OBESITY_ICD_10_CODES = ['E66.01', 'E66.09', 'E66.1', 'E66.2', 'E66.3', 'E66.8',
+                        'E66.9']
+
+
+OBS_SLEEP_ICD_9_CODE = '327.23'
+OBS_SLEEP_ICD_10_CODE = 'G47.33'
+
+
+GERD_ICD_9_CODE = '530.81'
+GERD_ICD_10_CODES = ['K21.0', 'K21.9']
 
 
 PLACE_OF_SERCVICE_NAMES = {
