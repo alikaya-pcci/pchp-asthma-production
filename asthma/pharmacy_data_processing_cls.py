@@ -4,13 +4,24 @@ from fuzzywuzzy import fuzz, process
 
 class IdentifyControllersAndRelievers:
 
-    @staticmethod
-    def _process_generic_product_name(df):
+    def __init__(self):
+        self._processed_generic_product_name = False
+        self._processed_claim_status = False
+
+    def _process_generic_product_name(self, df):
         arr = df.generic_product_name.str.strip().str.upper().values
         df['generic_product_name'] = arr
+        self._processed_generic_product_name = True
+
+    def _process_claim_status(self, df):
+        arr = df.claim_status.str.strip().str.upper().values
+        df['claim_status'] = arr
+        self._processed_claim_status = True
 
     def _identify_matching_controllers(self, df):
-        self._process_generic_product_name(df)
+        if not self._processed_generic_product_name:
+            self._process_generic_product_name(df)
+
         matching_controllers = (df
             .generic_product_name.drop_duplicates()
             .loc[lambda x: x != ''].to_frame().apply(
@@ -21,52 +32,38 @@ class IdentifyControllersAndRelievers:
             .dropna().map(lambda x: x[0]).drop_duplicates().values)
         self.controllers = matching_controllers
 
-    def _members_with_controllers(self, df):
+    def get_matching_controllers(self, df):
+        if not hasattr(self, 'controllers'):
+            self._identify_matching_controllers(df)
+        return self.controllers
+
+    def identify_controllers(self, df):
         if not hasattr(self, 'controllers'):
             self._identify_matching_controllers(df)
 
-        members_with_controllers = (df
-            .loc[lambda x: x.claim_status.str.strip() == 'PAID']
-            .loc[lambda x: x.generic_product_name.isin(self.controllers)])
-        self.data = members_with_controllers
+        if not self._processed_claim_status:
+            self._process_claim_status(df)
 
-    def extract_controllers_by_days_supply(self, df):
-        if not hasattr(self, 'data'):
-            self._members_with_controllers(df)
+        df['controller'] = 0
+        idx = df.loc[
+            lambda x: ((x.claim_status == 'PAID') &
+                       (x.generic_product_name.isin(self.controllers)))].index
+        df.loc[idx, 'controller'] = 1
 
-        df_controllers = (self.data
-            .groupby('member_medicaid_id')['days_supply'].sum().to_frame()
-            .reset_index())
-        arr = df_controllers.member_medicaid_id.astype(int).astype(str)
-        df_controllers['member_medicaid_id'] = arr
-        return df_controllers
+    def identify_relievers(self, df):
+        if not self._processed_generic_product_name:
+            self._process_generic_product_name(df)
 
-    def extract_controllers_by_count(self, df):
-        if not hasattr(self, 'data'):
-            self._members_with_controllers(df)
+        df['reliever'] = 0
+        idx = df.loc[
+            lambda x: ((x.claim_status == 'PAID') &
+                       (x.generic_product_name.map(
+                           lambda x: (('LEVALBUTEROL' in x) or
+                                      ('ALBUTEROL' in x) or
+                                      ('METAPROTERENOL' in x) or
+                                      ('PIRBUTEROL' in x)))))].index
+        df.loc[idx, 'reliever'] = 1
 
-        df_controllers = (self.data
-            .groupby('member_medicaid_id').size()
-            .to_frame(name='controller_count').reset_index())
-        arr = df_controllers.member_medicaid_id.astype(int).astype(str)
-        df_controllers['member_medicaid_id'] = arr
-        return df_controllers
-
-    @staticmethod
-    def extract_relievers(df):
-        df_relievers = (df.loc[lambda x: x.claim_status.str.strip() == 'PAID']
-            .loc[lambda x: x.generic_product_name.map(
-                lambda y: (('LEVALBUTEROL' in y) or
-                           ('ALBUTEROL' in y) or
-                           ('METAPROTERENOL' in y) or
-                           ('PIRBUTEROL' in y)))]
-            .groupby('member_medicaid_id').size().to_frame(name='relievers')
-            .reset_index())
-        arr = df_relievers.member_medicaid_id.astype(int).astype(str)
-        df_relievers['member_medicaid_id'] = arr
-        return df_relievers
-
-    @staticmethod
-    def get_amr_scores(df):
-        pass
-
+    def get_controllers_and_relievers(self, df):
+        self.identify_controllers(df)
+        self.identify_relievers(df)

@@ -65,3 +65,19 @@ class PharmacyViewDataValidation(ViewDataValidation):
 
     def __init__(self, filepath):
         super().__init__(filepath)
+        self._validated = False
+
+    def validate(self):
+        if self._df is None:
+            self._read_data_from_filepath()
+
+        assert self._df.days_supply.isnull().sum() == 0
+        assert self._df.claim_start_date.isnull().sum() == 0
+        assert self._df.member_age_on_date_of_service.min() >= 0
+        assert self._df.member_age_on_date_of_service.max() <= 17
+        self._validated = True
+
+    def get_validated_data(self):
+        if not self._validated:
+            self.validate()
+        return self._df

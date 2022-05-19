@@ -113,20 +113,27 @@ class IdentifyComorbidities:
                 .merge(df_gerd, how='left'))
 
 
-class IdentifyPastVisits:
+class PastVisitsBaseClass:
 
     def __init__(self, df):
         columns = ['member_medicaid_id', 'ED', 'inpt', 'outpt', 'dos_from',
                    'visitID', 'total_paid_amt', 'claimid', 'prm_as',
                    'prm_sec_as', 'attending_providerid']
-        for column in columns:
+
+        no_dos_column = False
+        for column in columns + ['dos']:
             if column not in df.columns:
-                msg = f'Past visits cannot be calculated without "{column}".'
-                raise KeyError(msg)
+                if column == 'dos':
+                    dos = df.dos_from.map(lambda x: datetime.strptime(
+                        x.strftime('%Y-%m-%d'), '%Y-%m-%d'))
+                    no_dos_column = True
+                else:
+                    m = f'Past visits cannot be calculated without "{column}".'
+                    raise KeyError(m)
 
         self.data = df[columns].copy()
-        self.data['dos'] = self.data.dos_from.map(
-            lambda x: datetime.strptime(x.strftime('%Y-%m-%d'), '%Y-%m-%d'))
+        if no_dos_column:
+            self.data['dos'] = dos
         self.data.drop('dos_from', axis=1, inplace=True)
         self.data.drop_duplicates(inplace=True)
         self.period = self.data.dos.max()
@@ -134,7 +141,7 @@ class IdentifyPastVisits:
                             .sort_values(ignore_index=True).to_frame())
 
 
-class IdentifyPastEDVisits(IdentifyPastVisits):
+class IdentifyPastEDVisits(PastVisitsBaseClass):
 
     def __init__(self, df):
         super().__init__(df)
@@ -211,7 +218,7 @@ class IdentifyPastEDVisits(IdentifyPastVisits):
         df_final = self.member_data.merge(df3, how=how).merge(df3_as, how=how)
         for c in ['ED_n3', 'ED_as_n3']:
             df_final[c].fillna(0, inplace=True)
-        return df
+        return df_final
 
     def get_past_ed_visits(self):
         df12 = self.get_past_12_months_ed_visits()
@@ -221,7 +228,7 @@ class IdentifyPastEDVisits(IdentifyPastVisits):
                 .merge(df6, how='left').merge(df3, how='left'))
 
 
-class IdentifyPastInpatientVisits(IdentifyPastVisits):
+class IdentifyPastInpatientVisits(PastVisitsBaseClass):
 
     def __init__(self, df):
         super().__init__(df)
@@ -370,7 +377,7 @@ class IdentifyPastInpatientVisits(IdentifyPastVisits):
                 .merge(dfu_as, how='left'))
 
 
-class IdentifyPastOutpatientVisits(IdentifyPastVisits):
+class IdentifyPastOutpatientVisits(PastVisitsBaseClass):
 
     def __init__(self, df):
         super().__init__(df)
@@ -486,3 +493,13 @@ class IdentifyPastOutpatientVisits(IdentifyPastVisits):
         return (self.member_data.merge(df12, how='left')
                 .merge(df6, how='left').merge(df3, how='left')
                 .merge(df_max_doc, how='left'))
+
+
+class IdentifyPastVisits:
+
+    @staticmethod
+    def get_past_visits(df):
+        df_ed = IdentifyPastEDVisits(df).get_past_ed_visits()
+        df_inpt = IdentifyPastInpatientVisits(df).get_past_inpt_visits()
+        df_outpt = IdentifyPastOutpatientVisits(df).get_past_outpt_visits()
+        return df_ed.merge(df_inpt).merge(df_outpt)
