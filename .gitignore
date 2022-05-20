@@ -2,5 +2,7 @@ asthma_view.ipynb
 asthma_view_data_validation.ipynb
 asthma/testing
 asthma/__pycache__
+asthma/claim/__pycache__
+asthma/pharmacy/__pycache__
 .idea
 .ipynb_checkpoints

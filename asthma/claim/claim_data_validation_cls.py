@@ -1,5 +1,4 @@
 import re
-import warnings
 from pandas.testing import assert_index_equal
 
 

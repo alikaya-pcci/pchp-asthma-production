@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from asthma.validate_schema import ValidateSchema
-from asthma.claim_data_validation_cls import *
+from asthma.claim.claim_data_validation_cls import *
 
 
 class ViewDataValidation:

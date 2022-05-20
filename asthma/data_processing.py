@@ -1,6 +1,7 @@
 from asthma.data_validation import *
-from asthma.claim_data_processing_cls import *
-from asthma.claim_member_level_cls import *
+from asthma.claim.claim_data_processing_cls import *
+from asthma.claim.claim_member_level_cls import *
+from asthma.pharmacy.pharmacy_data_processing_cls import *
 
 
 class ClaimViewDataProcessing:
@@ -20,8 +21,9 @@ class ClaimViewDataProcessing:
         if not self._processed:
             self._df = self.get_processed_data()
 
-        df_member_level = IdentifyPastVisits().get_past_visits(self._df)
-        return df_member_level
+        comorbidities = IdentifyComorbidities().identify_comorbidities(self._df)
+        visits = IdentifyPastVisits().get_past_visits(self._df)
+        return visits.merge(comorbidities, how='outer')
 
 
 class PharmacyViewDataProcessing:
@@ -30,4 +32,23 @@ class PharmacyViewDataProcessing:
         self._df = PharmacyViewDataValidation(filepath).get_validated_data()
 
     def get_member_level_data(self):
-        pass
+        IdentifyControllersRelievers().get_controllers_and_relievers(self._df)
+        amr = CalculateAMRScore().get_amr_scores(self._df)
+        amr['member_medicaid_id'] = (amr.member_medicaid_id.astype(int)
+                                     .astype(str))
+        controllers = GetLastThreeControllers(self._df).get_controllers()
+        controllers['member_medicaid_id'] = (controllers.member_medicaid_id
+                                             .astype(int).astype(str))
+        return amr.merge(controllers, how='outer')
+
+
+class GetCombinedMemberLevelData:
+
+    def __init__(self, filepath_claim, filepath_pharmacy):
+        self._fc = filepath_claim
+        self._fp = filepath_pharmacy
+
+    def get_data(self):
+        claims = ClaimViewDataProcessing(self._fc).get_member_level_data()
+        pharma = PharmacyViewDataProcessing(self._fp).get_member_level_data()
+        return claims.merge(pharma, how='outer')
